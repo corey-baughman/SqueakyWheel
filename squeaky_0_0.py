@@ -4,13 +4,24 @@ import time
 from moviepy import VideoFileClip
 from matplotlib import pyplot as plt
 import gpxpy
+from gpiozero import Button
+from signal import pause
 
-# GPIO setup
-GPIO.setmode(GPIO.BCM)
-YELLOW_BUTTON = 16
-RED_BUTTON = 17
-GPIO.setup(YELLOW_BUTTON, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-GPIO.setup(RED_BUTTON, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+# GPIO setup for gpiozero
+red_button = Button(17, pull_up=False)  # Pull-down for red button
+yellow_button = Button(16, pull_up=True)  # Pull-up for yellow button
+
+def red_button_pressed():
+    print("Red Button Pressed!")
+    time.sleep(3)  # Debounce: ignore further presses for 3 seconds
+
+def yellow_button_pressed():
+    print("Yellow Button Pressed!")
+    time.sleep(3)  # Debounce: ignore further presses for 3 seconds
+
+# Bind button presses to functions
+red_button.when_pressed = red_button_pressed
+yellow_button.when_pressed = yellow_button_pressed
 
 # Initialize Pygame
 pygame.init()
@@ -32,4 +43,5 @@ def display_message(text, color, blinking=False):
         screen.blit(arrow, arrow_rect)
     pygame.display.flip()
 
-### Additional functions and logic would go here ###
+print("Press the buttons to test them!")
+pause()  # Keep the script running and listen for button presses
