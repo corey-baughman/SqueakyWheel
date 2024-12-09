@@ -1,7 +1,7 @@
 import pygame
 import RPi.GPIO as GPIO
 import time
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 from matplotlib import pyplot as plt
 import gpxpy
 
