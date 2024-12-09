@@ -13,7 +13,7 @@ yellow_button = Button(16, pull_up=True)  # Pull-up for yellow button
 
 # Initialize Pygame
 pygame.init()
-screen = pygame.display.set_mode((800, 600))
+screen = pygame.display.set_mode((800, 600), pygame.RESIZABLE)
 pygame.display.set_caption("Squeaky Wheel")
 font = pygame.font.Font(None, 74)
 video_game_font = pygame.font.Font(pygame.font.match_font('freesansbold'), 74)
@@ -29,8 +29,13 @@ def yellow_button_pressed():
     time.sleep(3)  # Debounce: ignore further presses for 3 seconds
 
 def play_video(filename):
+    import tkinter as tk
+    root = tk.Tk()
+    root.attributes('-fullscreen', True)  # Maximize the video window
+    root.withdraw()  # Hide the root window
     clip = VideoFileClip(filename)
     clip.preview()
+    root.destroy()
 
 def display_message(text, color, blinking=False):
     """ Display a message on the screen."""
