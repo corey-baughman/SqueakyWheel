@@ -27,7 +27,9 @@ def display_message(text, color, blinking=False):
     message_rect = message.get_rect(center=(400, 300))
     screen.blit(message, message_rect)
     if blinking:
-        arrow = font.render(“↓”, True, color)
+        arrow = font.render("\u2193", True, color)
         arrow_rect = arrow.get_rect(center=(400, 400))
-     
-  ###}
+        screen.blit(arrow, arrow_rect)
+    pygame.display.flip()
+
+### Additional functions and logic would go here ###
