@@ -2,13 +2,14 @@ import pygame
 import RPi.GPIO as GPIO
 import time
 from moviepy import VideoFileClip
-from matplotlib import pyplot as plt
-import gpxpy
-import gpxpy.gpx
+import folium
 import pandas as pd
 from gpiozero import Button
 from signal import pause
 import threading
+import webbrowser
+import gpxpy
+import gpxpy.gpx
 
 # GPIO setup for gpiozero
 red_button = Button(17, pull_up=False)  # Pull-down for red button
@@ -27,22 +28,6 @@ dataframe_lock = threading.Lock()
 recorded_data = []
 
 VIDEO_START_TIME = pd.Timestamp("2024-11-26T22:59:36Z", tz="UTC")
-
-# Load GPX file
-def load_gpx_file(filepath):
-    with open(filepath, "r") as gpx_file:
-        gpx = gpxpy.parse(gpx_file)
-        return gpx
-
-gpx_data = load_gpx_file("Tuesday_Afternoon_Research-Field_Work.gpx")
-
-def get_location_for_time(target_time):
-    for track in gpx_data.tracks:
-        for segment in track.segments:
-            for point in segment.points:
-                if abs((point.time - target_time).total_seconds()) <= 1:  # Match to the nearest second
-                    return point.latitude, point.longitude
-    return None, None
 
 def red_button_pressed():
     elapsed_time = time.time() - video_start_time
@@ -63,7 +48,7 @@ def play_video(filename):
     global video_start_time
     clip = VideoFileClip(filename)
     video_start_time = time.time()  # Record the real start time of the video
-    clip.preview()  # Display the video directly
+    clip.preview()
     video_start_time = None  # Reset after video ends
     save_recorded_data()
 
@@ -72,6 +57,50 @@ def save_recorded_data():
         df = pd.DataFrame(recorded_data)
         df.to_csv("recorded_data.csv", index=False)
         print("Recorded data saved to recorded_data.csv")
+        plot_data_on_map(df)
+
+def plot_data_on_map(df):
+    if df.empty:
+        print("No data to plot.")
+        return
+
+    # Drop rows with NaN values
+    df = df.dropna(subset=["latitude", "longitude"])
+
+    # Create a map centered at the mean location
+    center_lat, center_lon = df["latitude"].mean(), df["longitude"].mean()
+    map_object = folium.Map(location=[center_lat, center_lon], zoom_start=15)
+
+    # Add markers for each location
+    for _, row in df.iterrows():
+        folium.Marker(
+            location=[row["latitude"], row["longitude"]],
+            popup=f"Time: {row['time']}",
+            icon=folium.Icon(color="red", icon="info-sign"),
+        ).add_to(map_object)
+
+    # Save map to an HTML file
+    map_file = "map_plot.html"
+    map_object.save(map_file)
+    print(f"Interactive map saved as {map_file}")
+
+    # Open the map in a web browser
+    webbrowser.open(map_file)
+
+def get_location_for_time(target_time):
+    for track in gpx_data.tracks:
+        for segment in track.segments:
+            for point in segment.points:
+                if abs((point.time - target_time).total_seconds()) <= 1:  # Match to the nearest second
+                    return point.latitude, point.longitude
+    return None, None
+
+def load_gpx_file(filepath):
+    with open(filepath, "r") as gpx_file:
+        gpx = gpxpy.parse(gpx_file)
+        return gpx
+
+gpx_data = load_gpx_file("Tuesday_Afternoon_Research-Field_Work.gpx")
 
 def display_message(text, color, blinking=False):
     """ Display a message on the screen."""
