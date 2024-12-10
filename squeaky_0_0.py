@@ -29,6 +29,8 @@ dataframe_lock = threading.Lock()
 recorded_data = []
 tracks_df = pd.DataFrame()
 
+yellow_button_active = True
+
 VIDEO_START_TIME = pd.Timestamp("2024-11-26T22:59:36Z", tz="UTC")
 
 # Custom debounce configuration
@@ -75,20 +77,26 @@ def red_button_pressed():
             recorded_data.append({"time": button_time, "latitude": lat, "longitude": lon})
 
 def yellow_button_pressed():
-    global last_yellow_button_press
+    global last_yellow_button_press, yellow_button_active
+    if not yellow_button_active:
+        print("Yellow button is inactive until video finishes.")
+        return
+
     new_time = debounce_button(last_yellow_button_press, DEBOUNCE_DELAY)
     if new_time:
         last_yellow_button_press = new_time
+        yellow_button_active = False  # Deactivate yellow button
         print("Yellow Button Pressed!")
         video_thread = threading.Thread(target=play_video, args=("DowningSt.mp4",))
         video_thread.start()
 
 def play_video(filename):
-    global video_start_time
+    global video_start_time, yellow_button_active
     clip = VideoFileClip(filename)
     video_start_time = time.time()  # Record the real start time of the video
     clip.preview()
     video_start_time = None  # Reset after video ends
+    yellow_button_active = True  # Reactivate yellow button
     save_recorded_data()
 
 def save_recorded_data():
