@@ -31,6 +31,17 @@ tracks_df = pd.DataFrame()
 
 VIDEO_START_TIME = pd.Timestamp("2024-11-26T22:59:36Z", tz="UTC")
 
+# Custom debounce configuration
+def debounce_button(last_press_time, debounce_delay):
+    current_time = time.time()
+    if current_time - last_press_time > debounce_delay:
+        return current_time
+    return None
+
+last_red_button_press = 0
+last_yellow_button_press = 0
+DEBOUNCE_DELAY = 0.3  # Seconds
+
 def interpolate_gpx_data(gpx_data):
     points = []
     for track in gpx_data.tracks:
@@ -52,19 +63,25 @@ def interpolate_gpx_data(gpx_data):
     return interpolated_df
 
 def red_button_pressed():
-    elapsed_time = time.time() - video_start_time
-    button_time = VIDEO_START_TIME + pd.Timedelta(seconds=elapsed_time)
-    print("Red Button Pressed!")
-    lat, lon = get_location_for_time(button_time)
-    with dataframe_lock:
-        recorded_data.append({"time": button_time, "latitude": lat, "longitude": lon})
-    time.sleep(3)  # Debounce: ignore further presses for 3 seconds
+    global last_red_button_press
+    new_time = debounce_button(last_red_button_press, DEBOUNCE_DELAY)
+    if new_time:
+        last_red_button_press = new_time
+        elapsed_time = time.time() - video_start_time
+        button_time = VIDEO_START_TIME + pd.Timedelta(seconds=elapsed_time)
+        print("Red Button Pressed!")
+        lat, lon = get_location_for_time(button_time)
+        with dataframe_lock:
+            recorded_data.append({"time": button_time, "latitude": lat, "longitude": lon})
 
 def yellow_button_pressed():
-    print("Yellow Button Pressed!")
-    video_thread = threading.Thread(target=play_video, args=("DowningSt.mp4",))
-    video_thread.start()
-    time.sleep(3)  # Debounce: ignore further presses for 3 seconds
+    global last_yellow_button_press
+    new_time = debounce_button(last_yellow_button_press, DEBOUNCE_DELAY)
+    if new_time:
+        last_yellow_button_press = new_time
+        print("Yellow Button Pressed!")
+        video_thread = threading.Thread(target=play_video, args=("DowningSt.mp4",))
+        video_thread.start()
 
 def play_video(filename):
     global video_start_time
