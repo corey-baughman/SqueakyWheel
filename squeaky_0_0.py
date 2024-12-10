@@ -10,6 +10,7 @@ import threading
 import webbrowser
 import gpxpy
 import gpxpy.gpx
+import numpy as np
 
 # GPIO setup for gpiozero
 red_button = Button(17, pull_up=False)  # Pull-down for red button
@@ -26,8 +27,29 @@ clock = pygame.time.Clock()
 stop_video_flag = threading.Event()
 dataframe_lock = threading.Lock()
 recorded_data = []
+tracks_df = pd.DataFrame()
 
 VIDEO_START_TIME = pd.Timestamp("2024-11-26T22:59:36Z", tz="UTC")
+
+def interpolate_gpx_data(gpx_data):
+    points = []
+    for track in gpx_data.tracks:
+        for segment in track.segments:
+            for point in segment.points:
+                points.append({
+                    "time": point.time,
+                    "latitude": point.latitude,
+                    "longitude": point.longitude
+                })
+    gpx_df = pd.DataFrame(points)
+    gpx_df = gpx_df.set_index("time").sort_index()
+
+    # Interpolate for every 0.1 second
+    time_index = pd.date_range(start=gpx_df.index.min(), end=gpx_df.index.max(), freq="100ms")
+    interpolated_df = gpx_df.reindex(time_index).interpolate(method="time").reset_index()
+    interpolated_df.columns = ["time", "latitude", "longitude"]
+
+    return interpolated_df
 
 def red_button_pressed():
     elapsed_time = time.time() - video_start_time
@@ -88,11 +110,10 @@ def plot_data_on_map(df):
     webbrowser.open(map_file)
 
 def get_location_for_time(target_time):
-    for track in gpx_data.tracks:
-        for segment in track.segments:
-            for point in segment.points:
-                if abs((point.time - target_time).total_seconds()) <= 1:  # Match to the nearest second
-                    return point.latitude, point.longitude
+    target_time = target_time.round("100ms")
+    closest_row = tracks_df.iloc[(tracks_df["time"] - target_time).abs().argsort()[:1]]
+    if not closest_row.empty:
+        return closest_row.iloc[0]["latitude"], closest_row.iloc[0]["longitude"]
     return None, None
 
 def load_gpx_file(filepath):
@@ -100,7 +121,11 @@ def load_gpx_file(filepath):
         gpx = gpxpy.parse(gpx_file)
         return gpx
 
+# Load GPX data and interpolate
+print("Interpolating GPX data...")
 gpx_data = load_gpx_file("Tuesday_Afternoon_Research-Field_Work.gpx")
+tracks_df = interpolate_gpx_data(gpx_data)
+print("Interpolation complete.")
 
 def display_message(text, color, blinking=False):
     """ Display a message on the screen."""
