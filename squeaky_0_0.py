@@ -7,7 +7,6 @@ import pandas as pd
 from gpiozero import Button
 from signal import pause
 import threading
-import webbrowser
 import gpxpy
 import gpxpy.gpx
 import numpy as np
@@ -100,6 +99,7 @@ def play_video(filename):
     video_start_time = None  # Reset after video ends
     ok_button_active = True  # Reactivate OK button
     save_recorded_data()
+    show_congratulations_window()
 
 def play_home_screen():
     clip = VideoFileClip("SqueakyHomeScreen.mp4")
@@ -112,6 +112,8 @@ def save_recorded_data():
         df.to_csv("recorded_data.csv", index=False)
         print("Recorded data saved to recorded_data.csv")
         plot_data_on_map(df)
+
+import os
 
 def plot_data_on_map(df):
     if df.empty:
@@ -138,8 +140,42 @@ def plot_data_on_map(df):
     map_object.save(map_file)
     print(f"Interactive map saved as {map_file}")
 
-    # Open the map in a web browser
-    webbrowser.open(map_file)
+    # Get the absolute path to the map file
+    map_file_path = os.path.abspath(map_file)
+
+    # Open the map in a new browser tab
+    import webbrowser
+    webbrowser.open_new_tab(f"file://{map_file_path}")
+
+def show_congratulations_window():
+    # Calculate the number of red button presses
+    num_problems = len(recorded_data)
+
+    # Create a new Pygame window for the message
+    congrats_screen = pygame.display.set_mode((1920, 1080), pygame.RESIZABLE)
+    pygame.display.set_caption("Congratulations")
+
+    font = pygame.font.Font("Retro Gaming.ttf", 40)
+    message = f"Congratulations!\nInstead of being spied on,\nyou reported {num_problems} problems\nfor repair!"
+
+    running = True
+    while running:
+        congrats_screen.fill((0, 0, 0))
+
+        y_offset = 300
+        for line in message.split("\n"):
+            text_surface = font.render(line, True, (255, 255, 0))
+            text_rect = text_surface.get_rect(center=(960, y_offset))
+            congrats_screen.blit(text_surface, text_rect)
+            y_offset += 100
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+    pygame.display.quit()
 
 def get_location_for_time(target_time):
     target_time = target_time.round("100ms")
