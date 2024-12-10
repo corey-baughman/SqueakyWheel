@@ -4,8 +4,11 @@ import time
 from moviepy import VideoFileClip
 from matplotlib import pyplot as plt
 import gpxpy
+import gpxpy.gpx
+import pandas as pd
 from gpiozero import Button
 from signal import pause
+import threading
 
 # GPIO setup for gpiozero
 red_button = Button(17, pull_up=False)  # Pull-down for red button
@@ -19,23 +22,56 @@ font = pygame.font.Font(None, 74)
 video_game_font = pygame.font.Font(pygame.font.match_font('freesansbold'), 74)
 clock = pygame.time.Clock()
 
+stop_video_flag = threading.Event()
+dataframe_lock = threading.Lock()
+recorded_data = []
+
+VIDEO_START_TIME = pd.Timestamp("2024-11-26T22:59:36Z", tz="UTC")
+
+# Load GPX file
+def load_gpx_file(filepath):
+    with open(filepath, "r") as gpx_file:
+        gpx = gpxpy.parse(gpx_file)
+        return gpx
+
+gpx_data = load_gpx_file("Tuesday_Afternoon_Research-Field_Work.gpx")
+
+def get_location_for_time(target_time):
+    for track in gpx_data.tracks:
+        for segment in track.segments:
+            for point in segment.points:
+                if abs((point.time - target_time).total_seconds()) <= 1:  # Match to the nearest second
+                    return point.latitude, point.longitude
+    return None, None
+
 def red_button_pressed():
+    elapsed_time = time.time() - video_start_time
+    button_time = VIDEO_START_TIME + pd.Timedelta(seconds=elapsed_time)
     print("Red Button Pressed!")
+    lat, lon = get_location_for_time(button_time)
+    with dataframe_lock:
+        recorded_data.append({"time": button_time, "latitude": lat, "longitude": lon})
     time.sleep(3)  # Debounce: ignore further presses for 3 seconds
 
 def yellow_button_pressed():
     print("Yellow Button Pressed!")
-    play_video("DowningSt.mov")
+    video_thread = threading.Thread(target=play_video, args=("DowningSt.mp4",))
+    video_thread.start()
     time.sleep(3)  # Debounce: ignore further presses for 3 seconds
 
 def play_video(filename):
-    import tkinter as tk
-    root = tk.Tk()
-    root.attributes('-fullscreen', True)  # Maximize the video window
-    root.withdraw()  # Hide the root window
+    global video_start_time
     clip = VideoFileClip(filename)
-    clip.preview()
-    root.destroy()
+    video_start_time = time.time()  # Record the real start time of the video
+    clip.preview()  # Display the video directly
+    video_start_time = None  # Reset after video ends
+    save_recorded_data()
+
+def save_recorded_data():
+    with dataframe_lock:
+        df = pd.DataFrame(recorded_data)
+        df.to_csv("recorded_data.csv", index=False)
+        print("Recorded data saved to recorded_data.csv")
 
 def display_message(text, color, blinking=False):
     """ Display a message on the screen."""
