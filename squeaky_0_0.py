@@ -14,14 +14,12 @@ import numpy as np
 
 # GPIO setup for gpiozero
 red_button = Button(17, pull_up=False)  # Pull-down for red button
-yellow_button = Button(16, pull_up=True)  # Pull-up for yellow button
+ok_button = Button(16, pull_up=True)  # Pull-up for OK button
 
 # Initialize Pygame
 pygame.init()
-screen = pygame.display.set_mode((800, 600), pygame.RESIZABLE)
+screen = pygame.display.set_mode((1920, 1080), pygame.RESIZABLE)
 pygame.display.set_caption("Squeaky Wheel")
-font = pygame.font.Font(None, 74)
-video_game_font = pygame.font.Font(pygame.font.match_font('freesansbold'), 74)
 clock = pygame.time.Clock()
 
 stop_video_flag = threading.Event()
@@ -29,7 +27,7 @@ dataframe_lock = threading.Lock()
 recorded_data = []
 tracks_df = pd.DataFrame()
 
-yellow_button_active = True
+ok_button_active = True
 
 VIDEO_START_TIME = pd.Timestamp("2024-11-26T22:59:36Z", tz="UTC")
 
@@ -41,7 +39,7 @@ def debounce_button(last_press_time, debounce_delay):
     return None
 
 last_red_button_press = 0
-last_yellow_button_press = 0
+last_ok_button_press = 0
 DEBOUNCE_DELAY = 0.3  # Seconds
 
 def interpolate_gpx_data(gpx_data):
@@ -76,28 +74,37 @@ def red_button_pressed():
         with dataframe_lock:
             recorded_data.append({"time": button_time, "latitude": lat, "longitude": lon})
 
-def yellow_button_pressed():
-    global last_yellow_button_press, yellow_button_active
-    if not yellow_button_active:
-        print("Yellow button is inactive until video finishes.")
+def ok_button_pressed():
+    global last_ok_button_press, ok_button_active, stop_video_flag
+    if not ok_button_active:
+        print("OK button is inactive until video finishes.")
         return
 
-    new_time = debounce_button(last_yellow_button_press, DEBOUNCE_DELAY)
+    new_time = debounce_button(last_ok_button_press, DEBOUNCE_DELAY)
     if new_time:
-        last_yellow_button_press = new_time
-        yellow_button_active = False  # Deactivate yellow button
-        print("Yellow Button Pressed!")
-        video_thread = threading.Thread(target=play_video, args=("DowningSt.mp4",))
-        video_thread.start()
+        last_ok_button_press = new_time
+        ok_button_active = False  # Deactivate OK button
+        print("OK Button Pressed!")
+        stop_video_flag.set()  # Stop the home screen video
+        home_screen_thread = threading.Thread(target=play_main_video)
+        home_screen_thread.start()
+
+def play_main_video():
+    play_video("DowningSt.mp4")
 
 def play_video(filename):
-    global video_start_time, yellow_button_active
+    global video_start_time, ok_button_active
     clip = VideoFileClip(filename)
     video_start_time = time.time()  # Record the real start time of the video
     clip.preview()
     video_start_time = None  # Reset after video ends
-    yellow_button_active = True  # Reactivate yellow button
+    ok_button_active = True  # Reactivate OK button
     save_recorded_data()
+
+def play_home_screen():
+    clip = VideoFileClip("SqueakyHomeScreen.mp4")
+    while not stop_video_flag.is_set():
+        clip.preview()
 
 def save_recorded_data():
     with dataframe_lock:
@@ -152,27 +159,14 @@ gpx_data = load_gpx_file("Tuesday_Afternoon_Research-Field_Work.gpx")
 tracks_df = interpolate_gpx_data(gpx_data)
 print("Interpolation complete.")
 
-def display_message(text, color, blinking=False):
-    """ Display a message on the screen."""
-    screen.fill((0, 0, 0))
-    message = video_game_font.render(text, True, color)
-    message_rect = message.get_rect(center=(400, 300))
-    screen.blit(message, message_rect)
-    if blinking:
-        arrow = video_game_font.render("\u2193", True, color)
-        arrow_rect = arrow.get_rect(center=(400, 400))
-        screen.blit(arrow, arrow_rect)
-    pygame.display.flip()
-
-def main_screen():
-    display_message("Squeaky Wheel", (255, 255, 0))
-    pygame.time.delay(1000)
-    display_message("Press the Yellow button\n on the center console to begin", (255, 255, 0), blinking=True)
+# Play the home screen video
+stop_video_flag.clear()
+home_screen_thread = threading.Thread(target=play_home_screen)
+home_screen_thread.start()
 
 # Bind button presses to functions
 red_button.when_pressed = red_button_pressed
-yellow_button.when_pressed = yellow_button_pressed
+ok_button.when_pressed = ok_button_pressed
 
-main_screen()
 print("Press the buttons to test them!")
 pause()  # Keep the script running and listen for button presses
