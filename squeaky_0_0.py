@@ -10,10 +10,14 @@ import threading
 import gpxpy
 import gpxpy.gpx
 import numpy as np
+import os
+import webbrowser
+import sys
 
 # GPIO setup for gpiozero
 red_button = Button(17, pull_up=False)  # Pull-down for red button
 ok_button = Button(16, pull_up=True)  # Pull-up for OK button
+reset_button = Button(6, pull_up=True)  # Pull-down for Reset button
 
 # Initialize Pygame
 pygame.init()
@@ -39,6 +43,7 @@ def debounce_button(last_press_time, debounce_delay):
 
 last_red_button_press = 0
 last_ok_button_press = 0
+last_reset_button_press = 0
 DEBOUNCE_DELAY = 0.3  # Seconds
 
 def interpolate_gpx_data(gpx_data):
@@ -88,6 +93,22 @@ def ok_button_pressed():
         home_screen_thread = threading.Thread(target=play_main_video)
         home_screen_thread.start()
 
+def reset_to_home():
+    print("Restarting the script...")
+    pygame.quit()  # Quit Pygame completely
+    stop_video_flag.set()  # Stop any ongoing video playback
+
+    # Relaunch the script
+    python = sys.executable
+    os.execv(python, [python] + sys.argv)
+
+def reset_button_pressed():
+    global last_reset_button_press
+    new_time = debounce_button(last_reset_button_press, DEBOUNCE_DELAY)
+    if new_time:
+        last_reset_button_press = new_time
+        reset_to_home()
+
 def play_main_video():
     play_video("DowningSt.mp4")
 
@@ -112,8 +133,6 @@ def save_recorded_data():
         df.to_csv("recorded_data.csv", index=False)
         print("Recorded data saved to recorded_data.csv")
         plot_data_on_map(df)
-
-import os
 
 def plot_data_on_map(df):
     if df.empty:
@@ -140,11 +159,8 @@ def plot_data_on_map(df):
     map_object.save(map_file)
     print(f"Interactive map saved as {map_file}")
 
-    # Get the absolute path to the map file
-    map_file_path = os.path.abspath(map_file)
-
     # Open the map in a new browser tab
-    import webbrowser
+    map_file_path = os.path.abspath(map_file)
     webbrowser.open_new_tab(f"file://{map_file_path}")
 
 def show_congratulations_window():
@@ -158,6 +174,11 @@ def show_congratulations_window():
     font = pygame.font.Font("Retro Gaming.ttf", 40)
     message = f"Congratulations!\nInstead of being spied on,\nyou reported {num_problems} problems\nfor repair!"
 
+    pygame.mixer.init()
+    pygame.mixer.music.load("house-loop-.wav")
+    pygame.mixer.music.play(loops=2)
+
+    start_time = time.time()
     running = True
     while running:
         congrats_screen.fill((0, 0, 0))
@@ -175,7 +196,17 @@ def show_congratulations_window():
             if event.type == pygame.QUIT:
                 running = False
 
+        if time.time() - start_time > 7:
+            running = False
+
     pygame.display.quit()
+    # Music will continue playing
+    threading.Thread(target=wait_for_music_and_reset).start()
+
+def wait_for_music_and_reset():
+    while pygame.mixer.music.get_busy():
+        time.sleep(0.1)
+    reset_to_home()
 
 def get_location_for_time(target_time):
     target_time = target_time.round("100ms")
@@ -203,6 +234,7 @@ home_screen_thread.start()
 # Bind button presses to functions
 red_button.when_pressed = red_button_pressed
 ok_button.when_pressed = ok_button_pressed
+reset_button.when_pressed = reset_button_pressed
 
 print("Press the buttons to test them!")
 pause()  # Keep the script running and listen for button presses
